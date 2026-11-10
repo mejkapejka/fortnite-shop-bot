@@ -1,6 +1,7 @@
 
 import os
 import json
+import time
 import urllib.request
 import requests
 
@@ -13,7 +14,7 @@ WEBHOOK_URL = os.environ["DISCORD_WEBHOOK"]
 now = datetime.now(ZoneInfo("Europe/Warsaw"))
 
 if now.hour != 1:
-    print("Nie jest jeszcze godzina wysyłki.")
+    print("It is not 1 AM yet.")
     raise SystemExit(0)
 
 request = urllib.request.Request(
@@ -27,20 +28,20 @@ with urllib.request.urlopen(request, timeout=30) as response:
 data = result["data"]
 
 categories = {
-    "Outfit": "🧥 STROJE",
-    "Pickaxe": "⛏️ KILOFY",
-    "Back Bling": "🎒 PLECAKI",
-    "Emote": "💃 EMOTKI",
-    "Glider": "🪂 LOTNIE",
-    "Wrap": "🎨 MALOWANIA",
-    "Music": "🎵 MUZYKA",
-    "Loading Screen": "🖼️ EKRANY WCZYTYWANIA",
-    "Contrail": "✨ SMUGI",
-    "Guitar": "🎸 GITARY",
-    "Bass": "🎸 BASY",
-    "Drum": "🥁 PERKUSJE",
-    "Microphone": "🎤 MIKROFONY",
-    "Bundle": "📦 ZESTAWY"
+    "Outfit": "🧥 SKINS",
+    "Pickaxe": "⛏️ PICKAXES",
+    "Back Bling": "🎒 BACK BLINGS",
+    "Emote": "💃 EMOTES",
+    "Glider": "🪂 GLIDERS",
+    "Wrap": "🎨 WRAPS",
+    "Music": "🎵 MUSIC",
+    "Loading Screen": "🖼️ LOADING SCREENS",
+    "Contrail": "✨ CONTRAILS",
+    "Guitar": "🎸 GUITARS",
+    "Bass": "🎸 BASSES",
+    "Drum": "🥁 DRUMS",
+    "Microphone": "🎤 MICROPHONES",
+    "Bundle": "📦 BUNDLES"
 }
 
 grouped = {}
@@ -48,7 +49,7 @@ grouped = {}
 for section in data.get("sections", []):
     for item in section.get("items", []):
 
-        # Pomijanie Jam Tracków
+        # Skip Jam Tracks
         if item.get("type") == "Jam Track":
             continue
 
@@ -59,9 +60,27 @@ for section in data.get("sections", []):
 
         grouped.setdefault(item_type, []).append(item)
 
-embeds = []
+
+def send_embed(embed):
+    response = requests.post(
+        WEBHOOK_URL,
+        json={"embeds": [embed]},
+        timeout=30
+    )
+
+    print("Discord status:", response.status_code)
+
+    if response.status_code >= 400:
+        print("Error details:", response.text)
+        response.raise_for_status()
+
+    print("Message sent!")
+
+
+print("Sending Fortnite Item Shop...")
 
 for item_type, items in grouped.items():
+
     category = categories.get(
         item_type,
         f"🎁 {item_type.upper()}"
@@ -70,24 +89,16 @@ for item_type, items in grouped.items():
     lines = []
 
     for item in items:
-        name = item.get("name") or "Nieznany przedmiot"
+        name = item.get("name") or "Unknown item"
         price = item.get("price") or {}
         amount = price.get("amount")
 
-        images = item.get("images") or {}
-        image = images.get("card") or images.get("render")
-
         if amount is not None:
-            price_text = f"{amount:,} V-Dolców".replace(",", " ")
+            price_text = f"{amount:,} V-Bucks"
         else:
-            price_text = "Brak ceny"
+            price_text = "Price unavailable"
 
-        line = f"• **{name}** — {price_text}"
-
-        if image:
-            line += f" [🖼️]({image})"
-
-        lines.append(line)
+        lines.append(f"• **{name}** — {price_text}")
 
     chunks = []
     current = ""
@@ -104,48 +115,23 @@ for item_type, items in grouped.items():
         chunks.append(current)
 
     for index, chunk in enumerate(chunks):
+
+        title = (
+            category
+            if index == 0
+            else f"{category} (PART {index + 1})"
+        )
+
         embed = {
-            "title": category if index == 0 else f"{category} (część {index + 1})",
+            "title": title,
             "description": chunk,
             "color": 0x8B5CF6,
             "footer": {
-                "text": "FORTNITE ITEM SHOP • Codzienna aktualizacja"
+                "text": "FORTNITE ITEM SHOP • DAILY UPDATE"
             }
         }
 
-        if index == 0 and items:
-            first_images = items[0].get("images") or {}
-            first_image = first_images.get("card") or first_images.get("render")
+        send_embed(embed)
+        time.sleep(0.5)
 
-            if first_image:
-                embed["thumbnail"] = {"url": first_image}
-
-        embeds.append(embed)
-
-if not embeds:
-    raise RuntimeError("Nie znaleziono przedmiotów w sklepie.")
-
-def send_embeds(batch):
-    payload = {"embeds": batch}
-
-    response = requests.post(
-        WEBHOOK_URL,
-        json=payload,
-        timeout=30
-    )
-
-    print("Status Discorda:", response.status_code)
-
-    if response.status_code >= 400:
-        print("Szczegóły:", response.text)
-        response.raise_for_status()
-
-    print("Wiadomość wysłana!")
-
-print("Wysyłanie sklepu na Discorda...")
-
-for i in range(0, len(embeds), 10):
-    batch = embeds[i:i + 10]
-    send_embeds(batch)
-
-print("Sklep Fortnite został wysłany!")
+print("Fortnite Item Shop sent successfully!")
