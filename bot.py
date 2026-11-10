@@ -56,6 +56,7 @@ for section in data.get("sections", []):
 embeds = []
 
 for item_type, items in grouped.items():
+    item_type = item_type or "Other"
     category = categories.get(item_type, f"🎁 {item_type.upper()}")
 
     lines = []
