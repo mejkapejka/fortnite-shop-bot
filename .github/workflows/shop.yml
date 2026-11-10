@@ -1,3 +1,4 @@
+
 name: Fortnite Shop
 
 on:
@@ -11,14 +12,18 @@ permissions:
 jobs:
   shop:
     runs-on: ubuntu-latest
+
     steps:
       - name: Pobierz kod
         uses: actions/checkout@v4
 
-      - name: Uruchom bota
+      - name: Ustaw Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Zainstaluj biblioteki
+        run: pip install -r requirements.txt
 
       - name: Wyslij sklep Fortnite
         run: python bot.py
