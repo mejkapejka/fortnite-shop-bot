@@ -21,7 +21,10 @@ if now.hour != 1:
 # Pobieranie sklepu
 request = urllib.request.Request(
     API_URL,
-    headers={"User-Agent": "FortniteShopDiscordBot/1.0"}
+    headers={
+    "Content-Type": "application/json",
+    "User-Agent": "DiscordBot (https://github.com/mejkapejka/fortnite-shop-bot, 1.0)"
+},
 )
 
 with urllib.request.urlopen(request, timeout=30) as response:
