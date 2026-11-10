@@ -11,12 +11,14 @@ from zoneinfo import ZoneInfo
 API_URL = "https://itemshop.gg/api/v1/shop/fortnite"
 WEBHOOK_URL = os.environ["DISCORD_WEBHOOK"]
 
+# Wysyłka o 01:00 czasu polskiego
 now = datetime.now(ZoneInfo("Europe/Warsaw"))
 
 if now.hour != 1:
     print("It is not 1 AM yet.")
     raise SystemExit(0)
 
+# Pobieranie sklepu
 request = urllib.request.Request(
     API_URL,
     headers={"User-Agent": "FortniteShopBot/1.0"}
@@ -27,40 +29,71 @@ with urllib.request.urlopen(request, timeout=30) as response:
 
 data = result["data"]
 
+# Kategorie i ich kolejność
 categories = {
     "Outfit": "🧥 SKINS",
     "Pickaxe": "⛏️ PICKAXES",
+    "Glider": "🪂 GLIDERS",
     "Back Bling": "🎒 BACK BLINGS",
     "Emote": "💃 EMOTES",
-    "Glider": "🪂 GLIDERS",
     "Wrap": "🎨 WRAPS",
-    "Music": "🎵 MUSIC",
-    "Loading Screen": "🖼️ LOADING SCREENS",
     "Contrail": "✨ CONTRAILS",
-    "Guitar": "🎸 GUITARS",
-    "Bass": "🎸 BASSES",
-    "Drum": "🥁 DRUMS",
-    "Microphone": "🎤 MICROPHONES",
+    "Loading Screen": "🖼️ LOADING SCREENS",
     "Bundle": "📦 BUNDLES"
 }
 
-grouped = {}
+# Pomijanie Jam Tracków
+def normalize(value):
+    if isinstance(value, dict):
+        value = " ".join(str(v) for v in value.values())
+
+    return str(value).lower().replace(" ", "").replace("_", "").replace("-", "")
+
+
+def is_jam_track(section, item):
+    fields = [
+        "type",
+        "displayType",
+        "category",
+        "subType",
+        "backendType",
+        "name"
+    ]
+
+    for field in fields:
+        if "jamtrack" in normalize(item.get(field, "")):
+            return True
+
+    for field in ["name", "title", "type", "category", "displayName"]:
+        if "jamtrack" in normalize(section.get(field, "")):
+            return True
+
+    return False
+
+
+# Grupowanie przedmiotów
+grouped = {category: [] for category in categories}
 
 for section in data.get("sections", []):
     for item in section.get("items", []):
 
-        # Skip Jam Tracks
-        if item.get("type") == "Jam Track":
+        if is_jam_track(section, item):
+            print("Skipped Jam Track:", item.get("name"))
             continue
 
-        item_type = item.get("type") or "Other"
+        item_type = item.get("type", "")
 
-        if not isinstance(item_type, str):
-            item_type = "Other"
+        if isinstance(item_type, dict):
+            item_type = item_type.get("value", "")
 
-        grouped.setdefault(item_type, []).append(item)
+        # Pomijamy kategorie spoza listy
+        if item_type not in categories:
+            continue
+
+        grouped[item_type].append(item)
 
 
+# Wysyłanie wiadomości
 def send_embed(embed):
     response = requests.post(
         WEBHOOK_URL,
@@ -74,22 +107,27 @@ def send_embed(embed):
         print("Error details:", response.text)
         response.raise_for_status()
 
-    print("Message sent!")
+    print("Category sent!")
 
 
 print("Sending Fortnite Item Shop...")
 
-for item_type, items in grouped.items():
+# Każda kategoria jako osobna wiadomość
+for item_type, title in categories.items():
 
-    category = categories.get(
-        item_type,
-        f"🎁 {item_type.upper()}"
-    )
+    items = grouped[item_type]
+
+    if not items:
+        continue
 
     lines = []
 
     for item in items:
+        if is_jam_track({}, item):
+            continue
+
         name = item.get("name") or "Unknown item"
+
         price = item.get("price") or {}
         amount = price.get("amount")
 
@@ -100,6 +138,10 @@ for item_type, items in grouped.items():
 
         lines.append(f"• **{name}** — {price_text}")
 
+    if not lines:
+        continue
+
+    # Dzielenie długiej kategorii
     chunks = []
     current = ""
 
@@ -116,14 +158,13 @@ for item_type, items in grouped.items():
 
     for index, chunk in enumerate(chunks):
 
-        title = (
-            category
-            if index == 0
-            else f"{category} (PART {index + 1})"
-        )
+        embed_title = title
+
+        if index > 0:
+            embed_title += f" (PART {index + 1})"
 
         embed = {
-            "title": title,
+            "title": embed_title,
             "description": chunk,
             "color": 0x8B5CF6,
             "footer": {
@@ -132,6 +173,6 @@ for item_type, items in grouped.items():
         }
 
         send_embed(embed)
-        time.sleep(0.5)
+        time.sleep(0.7)
 
 print("Fortnite Item Shop sent successfully!")
