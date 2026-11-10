@@ -134,8 +134,14 @@ for embed in embeds:
             method="POST"
         )
 
-        with urllib.request.urlopen(req, timeout=30) as response:
-            print("Wysłano wiadomość:", response.status)
+        try:
+    with urllib.request.urlopen(req, timeout=30) as response:
+        print("Wysłano wiadomość:", response.status)
+
+except urllib.error.HTTPError as e:
+    print("Błąd Discorda:", e.code)
+    print("Szczegóły:", e.read().decode("utf-8", errors="replace"))
+    raise
 
         batch = []
 
