@@ -14,7 +14,7 @@ WEBHOOK_URL = os.environ["DISCORD_WEBHOOK"]
 # Czas polski
 now = datetime.now(ZoneInfo("Europe/Warsaw"))
 
-# Automatyczne uruchomienie tylko o 01:00.
+# Automatyczna wysyłka tylko o 01:00.
 # Ręczne uruchomienie działa o każdej godzinie.
 event = os.getenv("GITHUB_EVENT_NAME", "")
 
@@ -46,6 +46,7 @@ categories = {
     "Bundle": "📦 BUNDLES"
 }
 
+
 def normalize(value):
     if isinstance(value, dict):
         value = " ".join(str(v) for v in value.values())
@@ -58,6 +59,7 @@ def normalize(value):
     )
 
 
+# Wykrywanie Jam Tracków
 def is_jam_track(section, item):
     item_fields = [
         "type",
@@ -122,7 +124,7 @@ def send_embed(embed):
         print("Error details:", response.text)
         response.raise_for_status()
 
-    print("Category sent!")
+    print("Message sent!")
 
 
 print("Sending Fortnite Item Shop...")
@@ -193,9 +195,31 @@ for item_type, title in categories.items():
         sent_count += 1
         time.sleep(0.7)
 
+
 if sent_count == 0:
     raise RuntimeError(
         "No categories were sent. Check Fortnite API item types."
     )
+
+
+# Wiadomość końcowa z datą i godziną
+updated_at = datetime.now(ZoneInfo("Europe/Warsaw"))
+
+date_text = updated_at.strftime("%d/%m/%Y")
+time_text = updated_at.strftime("%H:%M")
+
+final_embed = {
+    "title": "🛒 SHOP UPDATED",
+    "description": (
+        f"📅 **Date:** {date_text}\n"
+        f"🕒 **Time:** {time_text}"
+    ),
+    "color": 0x8B5CF6,
+    "footer": {
+        "text": "FORTNITE ITEM SHOP • DAILY UPDATE"
+    }
+}
+
+send_embed(final_embed)
 
 print("Fortnite Item Shop sent successfully!")
