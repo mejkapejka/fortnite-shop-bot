@@ -11,11 +11,15 @@ from zoneinfo import ZoneInfo
 API_URL = "https://itemshop.gg/api/v1/shop/fortnite"
 WEBHOOK_URL = os.environ["DISCORD_WEBHOOK"]
 
-# Wysyłka o 01:00 czasu polskiego
+# Czas polski
 now = datetime.now(ZoneInfo("Europe/Warsaw"))
 
-if now.hour != 1:
-    print("It is not 1 AM yet.")
+# Automatyczne uruchomienie tylko o 01:00.
+# Ręczne uruchomienie działa o każdej godzinie.
+event = os.getenv("GITHUB_EVENT_NAME", "")
+
+if event == "schedule" and now.hour != 1:
+    print("Not 1 AM in Poland. Skipping scheduled run.")
     raise SystemExit(0)
 
 # Pobieranie sklepu
@@ -29,7 +33,7 @@ with urllib.request.urlopen(request, timeout=30) as response:
 
 data = result["data"]
 
-# Kategorie i ich kolejność
+# Kategorie i kolejność
 categories = {
     "Outfit": "🧥 SKINS",
     "Pickaxe": "⛏️ PICKAXES",
@@ -42,16 +46,20 @@ categories = {
     "Bundle": "📦 BUNDLES"
 }
 
-# Pomijanie Jam Tracków
 def normalize(value):
     if isinstance(value, dict):
         value = " ".join(str(v) for v in value.values())
 
-    return str(value).lower().replace(" ", "").replace("_", "").replace("-", "")
+    return (
+        str(value).lower()
+        .replace(" ", "")
+        .replace("_", "")
+        .replace("-", "")
+    )
 
 
 def is_jam_track(section, item):
-    fields = [
+    item_fields = [
         "type",
         "displayType",
         "category",
@@ -60,11 +68,19 @@ def is_jam_track(section, item):
         "name"
     ]
 
-    for field in fields:
+    for field in item_fields:
         if "jamtrack" in normalize(item.get(field, "")):
             return True
 
-    for field in ["name", "title", "type", "category", "displayName"]:
+    section_fields = [
+        "name",
+        "title",
+        "type",
+        "category",
+        "displayName"
+    ]
+
+    for field in section_fields:
         if "jamtrack" in normalize(section.get(field, "")):
             return True
 
@@ -86,7 +102,6 @@ for section in data.get("sections", []):
         if isinstance(item_type, dict):
             item_type = item_type.get("value", "")
 
-        # Pomijamy kategorie spoza listy
         if item_type not in categories:
             continue
 
@@ -112,12 +127,15 @@ def send_embed(embed):
 
 print("Sending Fortnite Item Shop...")
 
-# Każda kategoria jako osobna wiadomość
+sent_count = 0
+
+# Każda kategoria osobno
 for item_type, title in categories.items():
 
     items = grouped[item_type]
 
     if not items:
+        print("Empty category:", title)
         continue
 
     lines = []
@@ -127,7 +145,6 @@ for item_type, title in categories.items():
             continue
 
         name = item.get("name") or "Unknown item"
-
         price = item.get("price") or {}
         amount = price.get("amount")
 
@@ -141,7 +158,7 @@ for item_type, title in categories.items():
     if not lines:
         continue
 
-    # Dzielenie długiej kategorii
+    # Dzielenie długich kategorii
     chunks = []
     current = ""
 
@@ -173,6 +190,12 @@ for item_type, title in categories.items():
         }
 
         send_embed(embed)
+        sent_count += 1
         time.sleep(0.7)
+
+if sent_count == 0:
+    raise RuntimeError(
+        "No categories were sent. Check Fortnite API item types."
+    )
 
 print("Fortnite Item Shop sent successfully!")
