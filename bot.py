@@ -3,14 +3,18 @@ import os
 import json
 import urllib.request
 import urllib.error
+import requests
+
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+
+# KONFIGURACJA
 API_URL = "https://itemshop.gg/api/v1/shop/fortnite"
 WEBHOOK_URL = os.environ["DISCORD_WEBHOOK"]
 
 
-# Wysyłanie tylko o 01:00 czasu polskiego
+# WYSYŁKA TYLKO O 01:00 CZASU POLSKIEGO
 now = datetime.now(ZoneInfo("Europe/Warsaw"))
 
 if now.hour != 1:
@@ -18,13 +22,14 @@ if now.hour != 1:
     raise SystemExit(0)
 
 
-# Pobieranie sklepu
+# POBIERANIE SKLEPU FORTNITE
+print("Pobieranie sklepu Fortnite...")
+
 request = urllib.request.Request(
     API_URL,
     headers={
-    "Content-Type": "application/json",
-    "User-Agent": "DiscordBot (https://github.com/mejkapejka/fortnite-shop-bot, 1.0)"
-},
+        "User-Agent": "FortniteShopBot/1.0"
+    }
 )
 
 with urllib.request.urlopen(request, timeout=30) as response:
@@ -33,7 +38,7 @@ with urllib.request.urlopen(request, timeout=30) as response:
 data = result["data"]
 
 
-# Kategorie przedmiotów
+# KATEGORIE
 categories = {
     "Outfit": "🧥 STROJE",
     "Pickaxe": "⛏️ KILOFY",
@@ -53,7 +58,7 @@ categories = {
 }
 
 
-# Grupowanie przedmiotów
+# GRUPOWANIE PRZEDMIOTÓW
 grouped = {}
 
 for section in data.get("sections", []):
@@ -66,10 +71,11 @@ for section in data.get("sections", []):
         grouped.setdefault(item_type, []).append(item)
 
 
-# Tworzenie embedów
+# TWORZENIE EMBEDÓW
 embeds = []
 
 for item_type, items in grouped.items():
+
     category = categories.get(
         item_type,
         f"🎁 {item_type.upper()}"
@@ -78,12 +84,18 @@ for item_type, items in grouped.items():
     lines = []
 
     for item in items:
+
         name = item.get("name") or "Nieznany przedmiot"
+
         price = item.get("price") or {}
         amount = price.get("amount")
+
         images = item.get("images") or {}
 
-        image = images.get("card") or images.get("render")
+        image = (
+            images.get("card")
+            or images.get("render")
+        )
 
         if amount is not None:
             price_text = f"{amount:,} V-Dolców".replace(",", " ")
@@ -97,14 +109,17 @@ for item_type, items in grouped.items():
 
         lines.append(line)
 
-    # Dzielenie kategorii na części
+    # DZIELENIE DŁUGICH KATEGORII
     chunks = []
     current = ""
 
     for line in lines:
+
         if len(current) + len(line) + 1 > 3500:
+
             if current:
                 chunks.append(current)
+
             current = ""
 
         current += line + "\n"
@@ -112,9 +127,15 @@ for item_type, items in grouped.items():
     if current:
         chunks.append(current)
 
+    # TWORZENIE EMBEDÓW
     for index, chunk in enumerate(chunks):
+
         embed = {
-            "title": category if index == 0 else f"{category} (część {index + 1})",
+            "title": (
+                category
+                if index == 0
+                else f"{category} (część {index + 1})"
+            ),
             "description": chunk,
             "color": 0x8B5CF6,
             "footer": {
@@ -123,48 +144,66 @@ for item_type, items in grouped.items():
         }
 
         if index == 0 and items:
+
             first_images = items[0].get("images") or {}
+
             first_image = (
                 first_images.get("card")
                 or first_images.get("render")
             )
 
             if first_image:
-                embed["thumbnail"] = {"url": first_image}
+                embed["thumbnail"] = {
+                    "url": first_image
+                }
 
         embeds.append(embed)
 
 
+# SPRAWDZENIE SKLEPU
 if not embeds:
     raise RuntimeError("Nie znaleziono przedmiotów w sklepie.")
 
 
-# Funkcja wysyłająca wiadomości na Discorda
+# WYSYŁANIE NA DISCORD
 def send_embeds(batch):
-    payload = json.dumps({
-        "embeds": batch
-    }).encode("utf-8")
 
-    req = urllib.request.Request(
-        WEBHOOK_URL,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
+    payload = {
+        "embeds": batch
+    }
 
     try:
-        with urllib.request.urlopen(req, timeout=30) as response:
-            print("Wysłano wiadomość:", response.status)
 
-    except urllib.error.HTTPError as e:
-        print("Błąd Discorda:", e.code)
-        print("Szczegóły:", e.read().decode("utf-8", errors="replace"))
+        response = requests.post(
+            WEBHOOK_URL,
+            json=payload,
+            timeout=30
+        )
+
+        print("Status Discorda:", response.status_code)
+
+        if response.status_code >= 400:
+
+            print("Szczegóły:", response.text)
+
+            response.raise_for_status()
+
+        print("Wiadomość wysłana!")
+
+    except requests.exceptions.RequestException as e:
+
+        print("Błąd wysyłania:", e)
+
         raise
 
 
-# Discord pozwala wysłać maksymalnie 10 embedów naraz
+# MAKSYMALNIE 10 EMBEDÓW W JEDNEJ WIADOMOŚCI
+print("Wysyłanie sklepu na Discorda...")
+
 for i in range(0, len(embeds), 10):
+
     batch = embeds[i:i + 10]
+
     send_embeds(batch)
 
 
